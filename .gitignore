@@ -16,3 +16,8 @@ logs/
 
 # Личные/учебные материалы — не относятся к проекту, не коммитим
 diploma/
+
+# Служебные файлы разработки — в репозитории не нужны
+CLAUDE.md
+PROMPT_FOR_CLAUDE_CODE.md
+hooks.settings.template.json
