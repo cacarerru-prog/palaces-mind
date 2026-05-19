@@ -1,0 +1,16 @@
+# Конфиг electron-builder — сборка установочного .exe.
+appId: com.palaces.mind
+productName: Palaces of the Mind
+
+# Что включать в собранное приложение.
+files:
+  - src/main/**/*
+  - dist/**/*
+  - package.json
+
+directories:
+  output: release
+
+# Сборка под Windows — установщик NSIS.
+win:
+  target: nsis

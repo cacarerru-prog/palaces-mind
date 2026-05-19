@@ -1,0 +1,24 @@
+/* Подключаем три слоя Tailwind — без них классы не работают. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Базовые стили всего приложения. */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #0f0f1a;
+  color: #e5e7eb;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  user-select: none;            /* интерфейс десктопного приложения */
+}
+
+/* Тонкий тёмный скроллбар вместо системного. */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #2a2a44; border-radius: 4px; }
+
+/* В полях ввода текст всё-таки можно выделять. */
+input, textarea { user-select: text; }
