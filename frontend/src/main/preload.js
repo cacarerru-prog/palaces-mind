@@ -10,15 +10,16 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 // Главный процесс передал токен через аргумент --palaces-token=...
-// Находим его среди аргументов процесса.
 const tokenArg = process.argv.find((a) => a.startsWith('--palaces-token='))
 const apiToken = tokenArg ? tokenArg.split('=')[1] : ''
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Свернуть окно.
+  /** Свернуть окно в панель задач. */
   minimize: () => ipcRenderer.send('window:minimize'),
-  // Закрыть окно (и всё приложение).
+  /** Переключить «развёрнуто на весь экран» / «обычный размер». */
+  toggleMaximize: () => ipcRenderer.send('window:toggleMaximize'),
+  /** «Закрыть» — на самом деле сворачивает в системный трей. */
   close: () => ipcRenderer.send('window:close'),
-  // Секретный токен — renderer прикладывает его к каждому запросу к API.
+  /** Секретный токен — renderer прикладывает его к каждому запросу к API. */
   getToken: () => apiToken,
 })

@@ -8,22 +8,16 @@
 const BASE = 'http://127.0.0.1:8765'
 
 /**
- * Внутренняя функция-обёртка над fetch.
- * Делает запрос, проверяет статус и возвращает разобранный JSON.
+ * Обёртка над fetch: ставит токен, проверяет статус, парсит JSON.
  *
- * К каждому запросу прикладывает секретный токен (X-Palaces-Token),
- * который окно получило от главного процесса Electron — без него
- * сервер ответит 401.
+ * Секретный токен (X-Palaces-Token) кладёт preload-мост Electron. Если
+ * приложение открыто не в Electron (обычный браузер) — токена не будет,
+ * и сервер с пустым токеном пустит без проверки.
  */
 async function request(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' }
-
-  // Берём токен из preload-моста. Если приложение открыто не в Electron
-  // (например, страница в обычном браузере) — токена не будет.
   const token = window.electronAPI?.getToken?.() || ''
-  if (token) {
-    headers['X-Palaces-Token'] = token
-  }
+  if (token) headers['X-Palaces-Token'] = token
 
   const response = await fetch(BASE + path, {
     ...options,
@@ -35,27 +29,51 @@ async function request(path, options = {}) {
   return response.json()
 }
 
-export const api = {
-  // Поиск по базе знаний.
-  search: (query, limit = 5) =>
-    request(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+/** Превращает массив id тем в строку '1,2,3' для query-параметра. */
+function topicsParam(topicIds) {
+  if (!topicIds || topicIds.length === 0) return ''
+  return '&topics=' + topicIds.join(',')
+}
 
-  // Список всех тем с количеством узлов.
+export const api = {
+  /** Поиск. mode: text | semantic | hybrid (по умолчанию). */
+  search: (
+    query,
+    { limit = 50, order = 'relevance', topicIds = [], mode = 'hybrid' } = {},
+  ) =>
+    request(
+      `/api/search?q=${encodeURIComponent(query)}&limit=${limit}&order=${order}&mode=${mode}${topicsParam(topicIds)}`,
+    ),
+
+  /** Достроить эмбеддинги для узлов, у которых их ещё нет. */
+  backfillEmbeddings: (batch = 25) =>
+    request(`/api/embeddings/backfill?batch=${batch}`, { method: 'POST' }),
+
+  /** Все узлы знаний (с фильтром и сортировкой). */
+  getAllNodes: ({ limit = 500, order = 'newest', topicIds = [] } = {}) =>
+    request(`/api/nodes?limit=${limit}&order=${order}${topicsParam(topicIds)}`),
+
+  /** Список всех тем с количеством узлов. */
   getTopics: () => request('/api/topics'),
 
-  // Узлы знаний конкретной темы.
-  getNodes: (topicId) => request(`/api/topics/${topicId}/nodes`),
+  /** Узлы знаний конкретной темы. */
+  getNodes: (topicId, order = 'topic') =>
+    request(`/api/topics/${topicId}/nodes?order=${order}`),
 
-  // Добавить запись вручную. data = {topic, subtopic, summary, detail}.
+  /** Добавить запись вручную. data = {topic, subtopic, summary, detail}. */
   addNote: (data) =>
     request('/api/notes', { method: 'POST', body: JSON.stringify(data) }),
 
-  // Удалить узел знаний по id.
+  /** Обновить summary/detail узла. */
+  patchNode: (id, data) =>
+    request(`/api/nodes/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  /** Удалить узел знаний по id. */
   deleteNode: (id) => request(`/api/nodes/${id}`, { method: 'DELETE' }),
 
-  // Общая статистика.
+  /** Общая статистика. */
   getStats: () => request('/api/stats'),
 
-  // Последние сессии Claude Code.
+  /** Последние сессии Claude Code. */
   getSessions: () => request('/api/sessions'),
 }

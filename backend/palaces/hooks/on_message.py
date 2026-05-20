@@ -41,6 +41,7 @@ from config import DB_PATH, MAX_SEARCH_RESULTS
 from palaces.db.schema import connect, init_db
 from palaces.db.queries import search_knowledge, save_query
 from palaces.utils.logger import get_logger
+from palaces.utils.redact import redact
 
 log = get_logger("on_message")
 
@@ -73,8 +74,9 @@ def main() -> None:
     conn = connect(DB_PATH)
     try:
         results = search_knowledge(conn, prompt, limit=MAX_SEARCH_RESULTS)
-        # 4. Логируем запрос в историю (даже если ничего не нашли).
-        save_query(conn, prompt, results, session_id)
+        # 4. Логируем запрос в историю (даже если ничего не нашли) —
+        # с маскировкой секретов, если пользователь случайно вставил токен.
+        save_query(conn, redact(prompt), results, session_id)
     finally:
         conn.close()
 

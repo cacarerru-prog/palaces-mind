@@ -95,6 +95,7 @@ def init_db(db_path) -> None:
     Создаёт файл базы и все таблицы, если их ещё нет.
 
     Вызывается один раз при старте FastAPI-сервера.
+    Также применяет лёгкие миграции (добавление новых колонок).
     """
     # Убеждаемся, что папка для файла базы существует.
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -103,6 +104,21 @@ def init_db(db_path) -> None:
     try:
         # executescript выполняет сразу несколько SQL-команд из строки.
         conn.executescript(SCHEMA_SQL)
+        _migrate(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """
+    Лёгкие миграции схемы: добавляет колонки, которых ещё нет.
+
+    SQLite не поддерживает «ADD COLUMN IF NOT EXISTS», поэтому проверяем
+    список существующих колонок через PRAGMA и добавляем недостающее.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(knowledge_nodes)")}
+    # Колонка embedding появилась с семантическим поиском (Gemini embeddings).
+    # Хранит вектор узла как BLOB (float32, упакованные struct'ом).
+    if "embedding" not in cols:
+        conn.execute("ALTER TABLE knowledge_nodes ADD COLUMN embedding BLOB")

@@ -33,6 +33,7 @@ from config import DB_PATH
 from palaces.db.schema import connect, init_db
 from palaces.db.queries import save_session
 from palaces.utils.logger import get_logger
+from palaces.utils.redact import redact
 
 log = get_logger("on_stop")
 
@@ -108,6 +109,11 @@ def run_hook() -> None:
     if not text.strip():
         log.info("Транскрипт пуст, сессия %s пропущена", session_id)
         return
+
+    # Маскируем секреты до записи в БД. Если пользователь в диалоге
+    # вставил токен/пароль — он не должен осесть в memory.db и потом
+    # уйти в LLM при разборе сессии.
+    text = redact(text)
 
     # На случай, если сервер ещё ни разу не запускался — создаём базу.
     init_db(DB_PATH)

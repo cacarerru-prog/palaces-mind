@@ -24,6 +24,8 @@ from palaces.db.queries import (
     mark_session_processed,
 )
 from palaces.nim.client import parse_and_structure
+from palaces.nim.embeddings import embed_text, pack_vector, node_text_for_embedding
+from palaces.db.queries import save_node_embedding, get_nodes_missing_embedding
 from palaces.utils.logger import get_logger
 
 log = get_logger("structuring")
@@ -53,7 +55,7 @@ def process_session(conn, session_db_id: int) -> int:
     for node in nodes:
         topic_id = get_or_create_topic(conn, node["topic"])
         subtopic_id = get_or_create_subtopic(conn, topic_id, node["subtopic"])
-        save_knowledge_node(
+        node_id = save_knowledge_node(
             conn,
             subtopic_id=subtopic_id,
             summary=node["summary"],
@@ -61,12 +63,42 @@ def process_session(conn, session_db_id: int) -> int:
             keywords=node["keywords"],
             session_id=session_db_id,
         )
+        # Сразу строим эмбеддинг для семантического поиска.
+        # При ошибке/нет ключа — embed_text вернёт None, тогда узел
+        # просто не попадёт в поиск по смыслу (но текстовый поиск работает).
+        vec = embed_text(node_text_for_embedding(node))
+        if vec:
+            save_node_embedding(conn, node_id, pack_vector(vec))
 
     # Помечаем обработанной, даже если узлов 0 — иначе уборщик будет
     # бесконечно возвращаться к этой сессии.
     mark_session_processed(conn, session_db_id)
     log.info("Сессия #%d разобрана: сохранено %d узлов", session_db_id, len(nodes))
     return len(nodes)
+
+
+def backfill_embeddings(batch_size: int = 25) -> int:
+    """
+    Достраивает эмбеддинги для узлов, у которых их ещё нет.
+
+    Запускается отдельной кнопкой / эндпоинтом — массовый прогон может
+    занять минуты на большой базе. За один вызов обрабатывает не больше
+    batch_size узлов, чтобы не упереться в лимит запросов LLM.
+    """
+    conn = connect(DB_PATH)
+    done = 0
+    try:
+        nodes = get_nodes_missing_embedding(conn, limit=batch_size)
+        for node in nodes:
+            vec = embed_text(node_text_for_embedding(node))
+            if vec:
+                save_node_embedding(conn, node["id"], pack_vector(vec))
+                done += 1
+        if done:
+            log.info("Бэкфилл эмбеддингов: %d узлов из %d", done, len(nodes))
+        return done
+    finally:
+        conn.close()
 
 
 def process_stale_sessions(idle_minutes: int, max_count: int) -> int:
