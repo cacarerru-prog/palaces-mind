@@ -16,6 +16,7 @@
 - **Десктопное приложение в трее.** Окно похоже на Obsidian: три колонки (фильтры/темы → список карточек → читалка). Копируется одной кнопкой что угодно: суть, детали, ключевые слова, весь узел в Markdown, отдельный блок кода. Сортировка по дате/теме/релевантности, фильтр по темам.
 - **Single instance + AppUserModelID.** Можно закрепить на панели задач Windows, повторный запуск открывает уже работающее окно, крестик `✕` сворачивает в трей вместо выхода.
 - **Маскировка секретов.** Перед записью в БД из транскриптов вычищаются токены и ключи (Google, OpenAI, Anthropic, GitHub, GitLab, Slack, AWS, NVIDIA, JWT, PEM, `password=`/`token=`).
+- **Полноценный десктопный `.exe`.** FastAPI-бэкенд упакован в `palaces-server.exe` через PyInstaller и вшит прямо в NSIS-установщик. После установки Python в системе нужен **только для хуков Claude Code** — сам сервер автономный.
 
 ---
 
@@ -78,6 +79,8 @@ palaces-of-the-mind/
 ├── backend/
 │   ├── config.py                       — пути, ключи, тайминги
 │   ├── requirements.txt
+│   ├── server.py                       — entry-point для PyInstaller
+│   ├── palaces-server.spec             — конфиг сборки автономного .exe
 │   ├── palaces/
 │   │   ├── db/
 │   │   │   ├── schema.py               — создание + миграции SQLite
@@ -115,7 +118,10 @@ palaces-of-the-mind/
 │   │           ├── Layout.jsx          — рамка приложения
 │   │           ├── NodeReader.jsx      — читалка узла
 │   │           └── CopyButton.jsx      — кнопка копирования
-│   └── package.json
+│   ├── electron-builder.yml            — конфиг NSIS-сборки
+│   ├── package.json
+│   ├── resources/                      — (gitignored) бандл palaces-server.exe
+│   └── release/                        — (gitignored) готовый установщик
 └── README.md
 ```
 
@@ -123,58 +129,72 @@ palaces-of-the-mind/
 
 ## Установка
 
-### 1. Python зависимости
+Есть два пути: **поставить готовый инсталлятор** (просто пользоваться) или **собрать самому из исходников** (хочешь править код).
 
-```powershell
-cd D:\mind\palaces-of-the-mind\backend
-pip install -r requirements.txt
-```
+### Путь 1 — готовый `.exe` (рекомендуется)
 
-### 2. Node зависимости
+1. Возьми `Palaces of the Mind Setup 1.0.0.exe` из релизов (`frontend/release/` после сборки или из GitHub Releases, когда выложу).
+2. Двойной клик → NSIS oneClick установит приложение в `%LOCALAPPDATA%\Programs\Palaces of the Mind\` и сразу запустит его.
+3. В меню Пуск появится ярлык — правый клик → **«Закрепить на панели задач»**.
+4. В трее появится значок. Меню по правому клику: Открыть / Запускать при входе в Windows / Выйти.
 
-```powershell
-cd D:\mind\palaces-of-the-mind\frontend
-npm install
-```
+Внутри инсталлятора:
+- Electron + React-сборка (UI);
+- `palaces-server.exe` — автономный FastAPI-сервер, упакованный PyInstaller'ом (включает uvicorn, openai, sqlite3, fastapi и все остальные зависимости).
 
-### 3. API-ключ Gemini
+После установки **Python в системе нужен только для хуков Claude Code** (`on_message.py`, `on_stop.py`). Сам сервер — самостоятельный `.exe`.
 
-Получи бесплатный ключ в [Google AI Studio](https://aistudio.google.com/apikey). Создай файл `.env` рядом с `config.py`:
+Дополнительно нужны:
+- **API-ключ Gemini** в `D:\mind\palaces-of-the-mind\backend\.env`:
+  ```
+  LLM_API_KEY=твой_ключ_сюда
+  ```
+  Бесплатный ключ — в [Google AI Studio](https://aistudio.google.com/apikey). Файл `.env` в `.gitignore` и в репозиторий не попадёт.
 
-```
-LLM_API_KEY=твой_ключ_сюда
-```
-
-Файл `.env` в `.gitignore` и в репозиторий не попадёт.
-
-### 4. Хуки Claude Code
-
-В `C:\Users\<твоё_имя>\.claude\settings.json` добавь:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python D:\\mind\\palaces-of-the-mind\\backend\\palaces\\hooks\\on_message.py"
+- **Хуки Claude Code** в `C:\Users\<твоё_имя>\.claude\settings.json`:
+  ```json
+  {
+    "hooks": {
+      "UserPromptSubmit": [{
+        "matcher": "",
+        "hooks": [{
+          "type": "command",
+          "command": "python D:\\mind\\palaces-of-the-mind\\backend\\palaces\\hooks\\on_message.py"
+        }]
+      }],
+      "Stop": [{
+        "matcher": "",
+        "hooks": [{
+          "type": "command",
+          "command": "python D:\\mind\\palaces-of-the-mind\\backend\\palaces\\hooks\\on_stop.py"
+        }]
       }]
-    }],
-    "Stop": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "python D:\\mind\\palaces-of-the-mind\\backend\\palaces\\hooks\\on_stop.py"
-      }]
-    }]
+    }
   }
-}
-```
+  ```
+
+База `memory.db`, логи и `.env` лежат в `D:\mind\palaces-of-the-mind\` независимо от установленного `.exe`. Поэтому переустановка приложения данные не теряет.
+
+### Путь 2 — сборка из исходников
+
+1. **Python-зависимости:**
+   ```powershell
+   cd D:\mind\palaces-of-the-mind\backend
+   pip install -r requirements.txt
+   pip install pyinstaller
+   ```
+
+2. **Node-зависимости:**
+   ```powershell
+   cd D:\mind\palaces-of-the-mind\frontend
+   npm install
+   ```
+
+3. Создай `.env` с ключом Gemini и пропиши хуки (см. Путь 1).
 
 ---
 
-## Запуск
+## Запуск и сборка
 
 ### Режим разработки
 
@@ -183,18 +203,52 @@ cd D:\mind\palaces-of-the-mind\frontend
 npm run dev
 ```
 
-Vite поднимает dev-сервер на `http://localhost:5173`, Electron спавнит Python-бэкенд (FastAPI на `127.0.0.1:8765`) и открывает окно приложения. В системном трее появляется иконка.
+Vite поднимает dev-сервер на `http://localhost:5173`, Electron спавнит Python-бэкенд (`python -m api.main` → FastAPI на `127.0.0.1:8765`) и открывает окно. В трее появляется иконка.
 
-### Сборка `.exe`
+Чтобы в этом режиме сработал `npm run build` чуть позже — нужен ещё одноразовый шаг для PyInstaller-кэша (см. ниже).
+
+### Сборка инсталлятора `.exe`
+
+Делается в два этапа: сначала собираем автономный бэкенд через PyInstaller, потом упаковываем всё через electron-builder.
 
 ```powershell
+# 1. Собрать palaces-server.exe (~28 МБ, в backend/dist/)
+cd D:\mind\palaces-of-the-mind\backend
+python -m PyInstaller palaces-server.spec --clean
+
+# 2. Скопировать его в frontend/resources/ — оттуда electron-builder его подхватит
+copy backend\dist\palaces-server.exe frontend\resources\palaces-server.exe
+
+# 3. Собрать установщик (~101 МБ, в frontend/release/)
 cd D:\mind\palaces-of-the-mind\frontend
 npm run build
 ```
 
-Установщик окажется в `frontend/release/`. На Windows для сборки требуется либо запуск из терминала с правами администратора, либо включённый **Developer Mode** (Settings → Privacy & security → For developers) — потому что electron-builder распаковывает архив с macOS-симлинками в кэш.
+Готовый установщик: `frontend/release/Palaces of the Mind Setup 1.0.0.exe`.
 
-После установки `.exe` ярлык можно закрепить на панели задач, а в меню трея появится галочка «Запускать при входе в Windows».
+#### Подводные камни сборки
+
+- **macOS-симлинки в winCodeSign.** Electron-builder качает архив `winCodeSign-2.6.0.7z` и при распаковке падает на macOS-симлинках `.dylib`, потому что Windows без прав админа или Developer Mode симлинки создавать не умеет. **Обход:** распаковать кэш вручную, исключая папку `darwin`:
+  ```bash
+  CACHE=C:/Users/<username>/AppData/Local/electron-builder/Cache/winCodeSign
+  mkdir -p "$CACHE"
+  curl -L -o "$CACHE/winCodeSign-2.6.0.7z" https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z
+  "frontend/node_modules/7zip-bin/win/x64/7za.exe" x "$CACHE/winCodeSign-2.6.0.7z" -o"$CACHE/winCodeSign-2.6.0" -y -x'!darwin'
+  ```
+  После этого `npm run build` подхватит кэш и не будет качать архив повторно.
+
+- **Антивирус ругается на `palaces-server.exe`.** PyInstaller-сборки часто триггерят ложные срабатывания Defender'а — он видит запакованный Python и пугается. Добавь исключение для папки `frontend/resources/` и установленного приложения.
+
+- **Свободное место на C:.** NSIS-установщик распаковывает архив в `%TEMP%` и устанавливает приложение в `%LOCALAPPDATA%`. Нужно минимум ~250 МБ свободного места на системном диске.
+
+### Полезные команды
+
+| Команда | Что делает |
+|---------|-----------|
+| `npm run dev` | Vite + Electron + Python-бэкенд (для разработки) |
+| `python -m PyInstaller palaces-server.spec --clean` | Пересобрать автономный сервер `palaces-server.exe` |
+| `npm run build` | Собрать NSIS-установщик `Palaces of the Mind Setup 1.0.0.exe` |
+| `cd backend && python -m api.main` | Запустить сервер вручную (без Electron) на порту 8765 |
 
 ---
 
