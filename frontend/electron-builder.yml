@@ -2,11 +2,18 @@
 appId: com.palaces.mind
 productName: Palaces of the Mind
 
-# Что включать в собранное приложение.
+# Что включать в собранное приложение (код Electron + готовая React-сборка).
 files:
   - src/main/**/*
   - dist/**/*
   - package.json
+
+# Внешние файлы, которые кладутся в папку resources/ установленного
+# приложения. Бандл бэкенда (palaces-server.exe) — именно такой ресурс:
+# Electron в рантайме находит его через process.resourcesPath.
+extraResources:
+  - from: resources/palaces-server.exe
+    to: palaces-server.exe
 
 directories:
   output: release
@@ -14,3 +21,9 @@ directories:
 # Сборка под Windows — установщик NSIS.
 win:
   target: nsis
+
+nsis:
+  oneClick: true
+  perMachine: false
+  # Удалять старую версию перед установкой — чтобы не накапливались.
+  deleteAppDataOnUninstall: false

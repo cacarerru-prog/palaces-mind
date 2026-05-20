@@ -37,7 +37,8 @@ if (!gotLock) {
 const APP_USER_MODEL_ID = 'com.palaces.mind'
 app.setAppUserModelId(APP_USER_MODEL_ID)
 
-// Папка с Python-бэкендом (прописана абсолютно).
+// Папка с Python-бэкендом для dev-режима (прописана абсолютно).
+// В упакованном виде используется бандл palaces-server.exe рядом с приложением.
 const BACKEND_DIR = 'D:\\mind\\palaces-of-the-mind\\backend'
 
 // Секретный токен на текущий запуск приложения.
@@ -53,15 +54,33 @@ let pyProcess = null
 let isQuitting = false
 
 
-/** Запускает Python-сервер (python -m api.main) из папки backend. */
+/**
+ * Запускает backend-сервер.
+ *
+ * В dev-режиме (`npm run dev`) — спавнит `python -m api.main` из backend/.
+ * В упакованном виде — запускает бандл `palaces-server.exe`, лежащий в
+ * resources рядом с установленным приложением (туда его кладёт
+ * electron-builder через секцию extraResources).
+ *
+ * windowsHide: true — скрывает чёрное окно консоли uvicorn,
+ * иначе при каждом запуске Electron мелькала бы консолька.
+ */
 function startBackend() {
-  pyProcess = spawn('python', ['-m', 'api.main'], {
-    cwd: BACKEND_DIR,
-    env: { ...process.env, PALACES_TOKEN: API_TOKEN },
-  })
-  pyProcess.stdout.on('data', (d) => console.log('[python]', d.toString()))
-  pyProcess.stderr.on('data', (d) => console.log('[python]', d.toString()))
-  pyProcess.on('error', (e) => console.error('Не удалось запустить Python:', e))
+  if (app.isPackaged) {
+    const serverExe = path.join(process.resourcesPath, 'palaces-server.exe')
+    pyProcess = spawn(serverExe, [], {
+      env: { ...process.env, PALACES_TOKEN: API_TOKEN },
+      windowsHide: true,
+    })
+  } else {
+    pyProcess = spawn('python', ['-m', 'api.main'], {
+      cwd: BACKEND_DIR,
+      env: { ...process.env, PALACES_TOKEN: API_TOKEN },
+    })
+  }
+  pyProcess.stdout.on('data', (d) => console.log('[backend]', d.toString()))
+  pyProcess.stderr.on('data', (d) => console.log('[backend]', d.toString()))
+  pyProcess.on('error', (e) => console.error('Не удалось запустить бэкенд:', e))
 }
 
 
