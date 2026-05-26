@@ -39,7 +39,8 @@ sys.path.insert(0, "D:/mind/palaces-of-the-mind/backend")
 
 from config import DB_PATH, MAX_SEARCH_RESULTS
 from palaces.db.schema import connect, init_db
-from palaces.db.queries import search_knowledge, save_query
+from palaces.db.queries import save_query
+from palaces.search import hybrid_search, dedupe_by_topic
 from palaces.utils.logger import get_logger
 from palaces.utils.redact import redact
 
@@ -70,10 +71,15 @@ def main() -> None:
     # На случай, если сервер ещё ни разу не запускался — создаём базу.
     init_db(DB_PATH)
 
-    # 2. Ищем релевантные записи в базе.
+    # 2. Ищем релевантные записи: гибрид text + semantic, затем
+    # ограничиваем число узлов одной темы (max 2), чтобы инжект давал
+    # разнообразный контекст, а не пять близких подтем одной области.
+    # Берём чуть больше кандидатов из гибрида, потому что после дедупа
+    # их станет меньше.
     conn = connect(DB_PATH)
     try:
-        results = search_knowledge(conn, prompt, limit=MAX_SEARCH_RESULTS)
+        candidates = hybrid_search(conn, prompt, limit=MAX_SEARCH_RESULTS * 3)
+        results = dedupe_by_topic(candidates, limit=MAX_SEARCH_RESULTS, max_per_topic=2)
         # 4. Логируем запрос в историю (даже если ничего не нашли) —
         # с маскировкой секретов, если пользователь случайно вставил токен.
         save_query(conn, redact(prompt), results, session_id)
