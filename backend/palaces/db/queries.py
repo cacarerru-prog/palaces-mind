@@ -133,6 +133,21 @@ def get_nodes_missing_embedding(
     return out
 
 
+def reset_all_embeddings(conn: sqlite3.Connection) -> int:
+    """
+    Стирает все эмбеддинги у узлов (UPDATE ... SET embedding = NULL).
+
+    Нужно при смене embedding-модели или размерности вектора — старые
+    векторы из другой модели несовместимы по смыслу с новыми, и косинус
+    между ними бесполезен. Возвращает число затронутых узлов.
+    """
+    cur = conn.execute(
+        "UPDATE knowledge_nodes SET embedding = NULL WHERE embedding IS NOT NULL"
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 def get_all_node_embeddings(
     conn: sqlite3.Connection,
 ) -> list[tuple[int, bytes]]:

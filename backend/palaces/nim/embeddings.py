@@ -5,9 +5,12 @@ embeddings.py — клиент эмбеддингов через OpenAI-совм
 тексты дают близкие векторы (по косинусу), поэтому по эмбеддингам можно
 искать «по смыслу», а не только по совпадению слов.
 
-Используем модель `text-embedding-004` (Gemini): 768 чисел типа float32,
-итого 768 * 4 = 3072 байта на запись. Храним эти байты в колонке
-knowledge_nodes.embedding (BLOB).
+Используем модель `gemini-embedding-001` (актуальная на 2026): по умолчанию
+3072-мерная, но через OpenAI-совместимый параметр `dimensions` обрезаем
+до 768. Так размер BLOB (768 * 4 = 3072 байта на запись) остаётся таким же,
+как был у прежней `text-embedding-004` — миграция упирается только в
+пересчёт, не в схему. По бенчмаркам MTEB новая модель заметно сильнее
+старой даже на половинной размерности.
 
 При любой ошибке возвращаем None — это значит «эмбеддинга нет», и
 семантический поиск просто не учтёт эту запись.
@@ -27,7 +30,13 @@ from palaces.utils.logger import get_logger
 log = get_logger("embeddings")
 
 # Модель эмбеддингов Gemini, доступная через OpenAI-совместимый эндпоинт.
-EMBED_MODEL = "text-embedding-004"
+EMBED_MODEL = "gemini-embedding-001"
+# Целевая размерность вектора. У gemini-embedding-001 родная размерность —
+# 3072; через параметр `dimensions` (OpenAI API) Gemini обрежет вектор до
+# нужного числа измерений (Matryoshka representation). 768 — компромисс
+# между качеством и размером BLOB. Перед сменой числа — стирать старые
+# эмбеддинги (см. queries.reset_all_embeddings + POST /api/embeddings/reset).
+EMBED_DIM = 768
 # Максимум входного текста — отрезаем длинные detail-поля,
 # чтобы не упереться в лимит токенов модели.
 MAX_INPUT_CHARS = 8000
@@ -59,7 +68,11 @@ def embed_text(text: str) -> list[float] | None:
     snippet = text[:MAX_INPUT_CHARS]
     try:
         client = _get_client()
-        response = client.embeddings.create(model=EMBED_MODEL, input=snippet)
+        response = client.embeddings.create(
+            model=EMBED_MODEL,
+            input=snippet,
+            dimensions=EMBED_DIM,
+        )
         vec = response.data[0].embedding
         return list(vec)
     except Exception as e:

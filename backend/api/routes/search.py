@@ -1,7 +1,7 @@
 """
 search.py — поиск по базе знаний.
 
-GET /api/search?q=текст&limit=20&order=relevance&topics=1,3&mode=hybrid
+GET /api/search?q=текст&limit=20&order=relevance&topics=1,3&mode=hybrid&rerank=0
     q        — запрос (обязательный)
     limit    — сколько результатов вернуть (макс)
     order    — для текстового режима: relevance | newest | oldest | updated | topic
@@ -9,10 +9,17 @@ GET /api/search?q=текст&limit=20&order=relevance&topics=1,3&mode=hybrid
     mode     — text   : текстовый поиск (LIKE по словам)
                semantic: семантический поиск (косинус эмбеддингов)
                hybrid  : смешанный (по умолчанию) — складывает оба score
+    rerank   — 1/true: после гибрида/семантики прогнать топ-кандидатов
+               через LLM-реранкер (find_relevant_memory). Дороже на один
+               запрос к LLM, но финальный порядок точнее.
 
 POST /api/embeddings/backfill?batch=50
     Достраивает эмбеддинги для узлов без них (для смыслового поиска
     в старых записях). Запускается из интерфейса кнопкой.
+
+POST /api/embeddings/reset
+    Стирает все эмбеддинги (embedding = NULL). Нужно при смене модели
+    или размерности вектора — после reset запустить backfill заново.
 """
 
 from fastapi import APIRouter
@@ -23,15 +30,26 @@ from palaces.db.queries import (
     search_knowledge,
     get_all_node_embeddings,
     get_nodes_by_ids,
+    reset_all_embeddings,
 )
 from palaces.nim.embeddings import (
     embed_text,
     unpack_vector,
     cosine,
 )
+from palaces.nim.client import find_relevant_memory
 from palaces.structuring import backfill_embeddings
 
 router = APIRouter(prefix="/api")
+
+
+def _truthy(value) -> bool:
+    """Превращает строку из query string в bool: '1','true','yes','on' -> True."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _parse_topics(value: str | None) -> list[int] | None:
@@ -84,6 +102,7 @@ def search(
     order: str = "relevance",
     topics: str | None = None,
     mode: str = "hybrid",
+    rerank: str | None = None,
 ) -> dict:
     """
     Поиск с тремя режимами: text / semantic / hybrid.
@@ -95,6 +114,7 @@ def search(
         return {"query": q, "results": [], "mode": mode}
 
     topic_ids = _parse_topics(topics)
+    do_rerank = _truthy(rerank)
 
     # ── Чистый текстовый режим ──
     if mode == "text":
@@ -105,7 +125,9 @@ def search(
             )
         finally:
             conn.close()
-        return {"query": q, "results": results, "mode": "text"}
+        if do_rerank and order == "relevance":
+            results = find_relevant_memory(q, results)
+        return {"query": q, "results": results, "mode": "text", "reranked": do_rerank}
 
     # ── Семантический режим ──
     if mode == "semantic":
@@ -123,7 +145,10 @@ def search(
             n["score"] = round(score_map.get(n["id"], 0.0), 4)
         if topic_ids:
             nodes = [n for n in nodes if n.get("topic_id") in topic_ids]
-        return {"query": q, "results": nodes[:limit], "mode": "semantic"}
+        nodes = nodes[:limit]
+        if do_rerank:
+            nodes = find_relevant_memory(q, nodes)
+        return {"query": q, "results": nodes, "mode": "semantic", "reranked": do_rerank}
 
     # ── Гибридный режим (по умолчанию) ──
     # Берём текстовые попадания + семантические, складываем score.
@@ -163,7 +188,9 @@ def search(
         n["score"] = round(combined.get(n["id"], 0.0), 4)
     if topic_ids:
         nodes = [n for n in nodes if n.get("topic_id") in topic_ids]
-    return {"query": q, "results": nodes, "mode": "hybrid"}
+    if do_rerank:
+        nodes = find_relevant_memory(q, nodes)
+    return {"query": q, "results": nodes, "mode": "hybrid", "reranked": do_rerank}
 
 
 @router.post("/embeddings/backfill")
@@ -171,3 +198,20 @@ def embeddings_backfill(batch: int = 25) -> dict:
     """Достраивает эмбеддинги для узлов, у которых их ещё нет."""
     done = backfill_embeddings(batch_size=batch)
     return {"status": "ok", "embedded": done}
+
+
+@router.post("/embeddings/reset")
+def embeddings_reset() -> dict:
+    """
+    Стирает все эмбеддинги (UPDATE ... SET embedding = NULL).
+
+    Нужно после смены embedding-модели или размерности — старые векторы
+    несовместимы по смыслу с новыми. После reset запустить /api/embeddings/backfill
+    (возможно, несколько раз с batch=50, пока embedded не станет 0).
+    """
+    conn = connect(DB_PATH)
+    try:
+        cleared = reset_all_embeddings(conn)
+    finally:
+        conn.close()
+    return {"status": "ok", "cleared": cleared}
