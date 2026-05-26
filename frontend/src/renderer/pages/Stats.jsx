@@ -6,14 +6,17 @@
  */
 
 import { useState, useEffect } from 'react'
+import { BarChart3, CheckCircle2, Clock } from 'lucide-react'
 import { api } from '../api.js'
 
 /** Маленькая карточка с числом и подписью. */
 function StatCard({ label, value }) {
   return (
-    <div className="bg-surface rounded-xl p-4 text-center">
-      <div className="text-3xl font-bold text-accent">{value}</div>
-      <div className="text-sm text-gray-400 mt-1">{label}</div>
+    <div className="bg-surface border border-border rounded-lg p-4">
+      <div className="text-3xl font-semibold text-accent font-mono">{value}</div>
+      <div className="text-[10px] uppercase tracking-widest text-text-dim mt-1 font-semibold">
+        {label}
+      </div>
     </div>
   )
 }
@@ -21,10 +24,9 @@ function StatCard({ label, value }) {
 /** Простой столбчатый график активности на чистом SVG. */
 function ActivityChart({ activity }) {
   if (!activity || activity.length === 0) {
-    return <div className="text-sm text-gray-500">Пока нет данных для графика.</div>
+    return <div className="text-sm text-text-dim">Пока нет данных для графика.</div>
   }
 
-  // Максимум нужен, чтобы масштабировать высоту столбиков.
   const max = Math.max(...activity.map((d) => d.count), 1)
   const barWidth = 18
   const gap = 6
@@ -37,22 +39,21 @@ function ActivityChart({ activity }) {
         const barHeight = (d.count / max) * height
         return (
           <g key={d.day}>
-            {/* Столбик. */}
             <rect
               x={i * (barWidth + gap)}
               y={height - barHeight}
               width={barWidth}
               height={barHeight}
-              fill="#7c3aed"
+              fill="#d97757"
               rx="3"
             />
-            {/* Число над столбиком. */}
             <text
               x={i * (barWidth + gap) + barWidth / 2}
               y={height - barHeight - 4}
-              fill="#9ca3af"
+              fill="#a8a6a1"
               fontSize="9"
               textAnchor="middle"
+              fontFamily="JetBrains Mono, monospace"
             >
               {d.count}
             </text>
@@ -68,7 +69,6 @@ export default function Stats() {
   const [sessions, setSessions] = useState([])
   const [error, setError] = useState('')
 
-  // Грузим статистику и список сессий при открытии страницы.
   useEffect(() => {
     Promise.all([api.getStats(), api.getSessions()])
       .then(([statsData, sessionsData]) => {
@@ -78,14 +78,16 @@ export default function Stats() {
       .catch(() => setError('Не удалось загрузить статистику. Запущен ли сервер?'))
   }, [])
 
-  if (error) return <div className="text-red-400">{error}</div>
-  if (!stats) return <div className="text-gray-400">Загрузка…</div>
+  if (error) return <div className="p-6 text-danger text-sm">{error}</div>
+  if (!stats) return <div className="p-6 text-text-dim text-sm">Загрузка…</div>
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">📊 Статистика</h1>
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="flex items-center gap-2.5 mb-6">
+        <BarChart3 size={20} strokeWidth={1.75} className="text-accent" />
+        <h1 className="text-xl font-semibold text-text">Статистика</h1>
+      </div>
 
-      {/* Четыре карточки с числами. */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="Сессий" value={stats.total_sessions} />
         <StatCard label="Знаний" value={stats.total_nodes} />
@@ -93,26 +95,39 @@ export default function Stats() {
         <StatCard label="Запросов" value={stats.total_queries} />
       </div>
 
-      {/* График активности. */}
-      <h2 className="text-lg font-medium mt-6 mb-2">Активность за 30 дней</h2>
-      <div className="bg-surface rounded-xl p-4 overflow-x-auto">
+      <h2 className="text-[10px] uppercase tracking-widest text-text-dim font-semibold mt-8 mb-2">
+        Активность за 30 дней
+      </h2>
+      <div className="bg-surface border border-border rounded-lg p-4 overflow-x-auto">
         <ActivityChart activity={stats.activity} />
       </div>
 
-      {/* Таблица последних сессий. */}
-      <h2 className="text-lg font-medium mt-6 mb-2">Последние сессии</h2>
-      <div className="bg-surface rounded-xl overflow-hidden">
+      <h2 className="text-[10px] uppercase tracking-widest text-text-dim font-semibold mt-8 mb-2">
+        Последние сессии
+      </h2>
+      <div className="bg-surface border border-border rounded-lg overflow-hidden">
         {sessions.length === 0 && (
-          <div className="p-4 text-sm text-gray-500">Сессий пока нет.</div>
+          <div className="p-4 text-sm text-text-dim">Сессий пока нет.</div>
         )}
         {sessions.slice(0, 10).map((s) => (
           <div
             key={s.id}
-            className="flex justify-between px-4 py-2 border-b border-bg last:border-0 text-sm"
+            className="flex justify-between items-center px-4 py-2.5 border-b border-border last:border-0 text-sm"
           >
-            <span className="text-gray-300">{s.started_at}</span>
-            {/* processed = 1 — разобрана NIM, иначе ещё в очереди. */}
-            <span>{s.processed ? '✅ разобрана' : '⏳ в очереди'}</span>
+            <span className="text-text-muted font-mono text-[12px]">{s.started_at}</span>
+            <span className="flex items-center gap-1.5 text-xs">
+              {s.processed ? (
+                <>
+                  <CheckCircle2 size={13} strokeWidth={2} className="text-success" />
+                  <span className="text-success">разобрана</span>
+                </>
+              ) : (
+                <>
+                  <Clock size={13} strokeWidth={2} className="text-text-muted" />
+                  <span className="text-text-muted">в очереди</span>
+                </>
+              )}
+            </span>
           </div>
         ))}
       </div>

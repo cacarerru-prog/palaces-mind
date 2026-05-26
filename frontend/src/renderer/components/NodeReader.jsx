@@ -8,22 +8,21 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Pencil, Trash2, Save, X as XIcon } from 'lucide-react'
 import { api } from '../api.js'
 import CopyButton from './CopyButton.jsx'
 
 /** Превращает текст из detail в массив React-узлов с блоками кода. */
 function renderDetail(text, highlight) {
   if (!text) return null
-  // Разбиваем по тройным обратным кавычкам — нечётные индексы = блоки кода.
   const parts = text.split('```')
   return parts.map((part, i) => {
     if (i % 2 === 1) {
-      // Внутри блока кода может быть имя языка в первой строке — отбрасываем.
       const lines = part.split('\n')
       const body = lines.slice(1).join('\n').trimEnd() || part
       return (
-        <div key={i} className="relative my-2 group">
-          <pre className="bg-bg rounded-lg p-3 text-xs text-gray-200 overflow-x-auto whitespace-pre">
+        <div key={i} className="relative my-3 group">
+          <pre className="bg-bg border border-border rounded-md p-3 text-xs text-text overflow-x-auto whitespace-pre font-mono">
             <code>{body}</code>
           </pre>
           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition">
@@ -32,9 +31,8 @@ function renderDetail(text, highlight) {
         </div>
       )
     }
-    // Обычный текст — подсветка совпадений запросом, если задан.
     return (
-      <span key={i} className="whitespace-pre-wrap text-gray-300">
+      <span key={i} className="whitespace-pre-wrap text-text-muted">
         {highlightText(part, highlight)}
       </span>
     )
@@ -49,13 +47,12 @@ function highlightText(text, highlight) {
     .split(/\s+/)
     .filter((w) => w.length > 2)
   if (words.length === 0) return text
-  // Экранируем спецсимволы regex и собираем единый паттерн.
   const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const re = new RegExp(`(${escaped.join('|')})`, 'gi')
   const parts = text.split(re)
   return parts.map((p, i) =>
     re.test(p) ? (
-      <mark key={i} className="bg-accent/40 text-gray-100 rounded px-0.5">
+      <mark key={i} className="bg-accent/30 text-text rounded px-0.5">
         {p}
       </mark>
     ) : (
@@ -71,6 +68,10 @@ function nodeToMarkdown(n) {
   return `# ${n.topic} → ${n.subtopic}\n\n${n.summary}${detail}${kw}`
 }
 
+const FIELD_CLASS =
+  'w-full bg-bg border border-border rounded-md px-3 py-2 ' +
+  'text-text placeholder:text-text-dim focus:border-accent focus:outline-none transition-colors'
+
 export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
   const [editing, setEditing] = useState(false)
   const [summary, setSummary] = useState('')
@@ -85,7 +86,7 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
 
   if (!node) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500 text-sm">
+      <div className="h-full flex items-center justify-center text-text-dim text-sm">
         Выбери карточку слева, чтобы прочитать.
       </div>
     )
@@ -114,19 +115,15 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
     }
   }
 
-  const fieldClass =
-    'w-full bg-bg rounded-lg px-3 py-2 outline-none ' +
-    'focus:ring-2 focus:ring-accent text-gray-100'
-
   return (
     <div className="h-full flex flex-col">
       {/* Шапка: тема → подтема, дата, действия. */}
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
         <div className="min-w-0">
-          <div className="text-xs text-accent font-medium uppercase tracking-wide">
-            {node.topic} → {node.subtopic}
+          <div className="text-[10px] uppercase tracking-widest text-accent font-semibold">
+            {node.topic} <span className="text-text-dim">·</span> {node.subtopic}
           </div>
-          <div className="text-[11px] text-gray-500 mt-0.5">
+          <div className="text-[11px] text-text-dim mt-1 font-mono">
             Создано: {node.created_at}
             {node.updated_at && node.updated_at !== node.created_at && (
               <>  · Обновлено: {node.updated_at}</>
@@ -140,8 +137,9 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
               <button
                 onClick={save}
                 disabled={saving}
-                className="px-2.5 py-1 text-xs rounded-md bg-accent text-white hover:bg-accent-dim"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md bg-accent text-bg hover:bg-accent-hover transition-colors disabled:opacity-50"
               >
+                <Save size={12} strokeWidth={2} />
                 {saving ? 'Сохраняю…' : 'Сохранить'}
               </button>
               <button
@@ -150,8 +148,9 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
                   setSummary(node.summary || '')
                   setDetail(node.detail || '')
                 }}
-                className="px-2.5 py-1 text-xs rounded-md bg-bg text-gray-300 hover:bg-surface"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-border bg-bg text-text-muted hover:text-text hover:border-border-strong transition-colors"
               >
+                <XIcon size={12} strokeWidth={2} />
                 Отмена
               </button>
             </>
@@ -159,14 +158,16 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
             <>
               <button
                 onClick={() => setEditing(true)}
-                className="px-2.5 py-1 text-xs rounded-md bg-bg text-gray-300 hover:bg-surface"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-border bg-bg text-text-muted hover:text-text hover:border-border-strong transition-colors"
               >
+                <Pencil size={12} strokeWidth={1.75} />
                 Править
               </button>
               <button
                 onClick={remove}
-                className="px-2.5 py-1 text-xs rounded-md bg-bg text-gray-300 hover:bg-red-600 hover:text-white"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border border-border bg-bg text-text-muted hover:bg-danger hover:text-white hover:border-danger transition-colors"
               >
+                <Trash2 size={12} strokeWidth={1.75} />
                 Удалить
               </button>
             </>
@@ -174,12 +175,12 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
         </div>
       </div>
 
-      {/* Содержимое — прокрутка только здесь, шапка зафиксирована. */}
-      <div className="flex-1 overflow-y-auto pr-2">
+      {/* Содержимое — прокрутка только здесь. */}
+      <div className="flex-1 overflow-y-auto px-5 py-4">
         {/* Краткая суть. */}
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] uppercase text-gray-500 tracking-wider">
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] uppercase text-text-dim tracking-widest font-semibold">
               Суть
             </span>
             {!editing && <CopyButton compact text={node.summary} />}
@@ -189,19 +190,19 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               rows={3}
-              className={fieldClass}
+              className={FIELD_CLASS}
             />
           ) : (
-            <p className="text-gray-100 text-base leading-relaxed">
+            <p className="text-text text-[15px] leading-relaxed">
               {highlightText(node.summary || '', highlight)}
             </p>
           )}
-        </div>
+        </section>
 
-        {/* Подробности (с блоками кода). */}
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[11px] uppercase text-gray-500 tracking-wider">
+        {/* Подробности. */}
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] uppercase text-text-dim tracking-widest font-semibold">
               Подробно
             </span>
             {!editing && node.detail && <CopyButton compact text={node.detail} />}
@@ -211,22 +212,22 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
               rows={12}
-              className={fieldClass + ' font-mono text-sm'}
+              className={FIELD_CLASS + ' font-mono text-sm'}
             />
           ) : node.detail ? (
             <div className="text-sm leading-relaxed">
               {renderDetail(node.detail, highlight)}
             </div>
           ) : (
-            <div className="text-sm text-gray-500 italic">Без подробностей.</div>
+            <div className="text-sm text-text-dim italic">Без подробностей.</div>
           )}
-        </div>
+        </section>
 
         {/* Ключевые слова. */}
         {node.keywords?.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] uppercase text-gray-500 tracking-wider">
+          <section>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] uppercase text-text-dim tracking-widest font-semibold">
                 Ключевые слова
               </span>
               <CopyButton compact text={node.keywords.join(', ')} />
@@ -235,13 +236,13 @@ export default function NodeReader({ node, highlight, onDeleted, onUpdated }) {
               {node.keywords.map((kw) => (
                 <span
                   key={kw}
-                  className="text-xs bg-bg px-2 py-0.5 rounded text-gray-300"
+                  className="text-[11px] font-mono bg-bg border border-border px-2 py-0.5 rounded text-text-muted"
                 >
                   {kw}
                 </span>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
     </div>

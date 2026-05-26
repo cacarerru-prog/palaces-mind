@@ -3,22 +3,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Базовые стили всего приложения. */
+/* Базовые стили всего приложения — тёмная тёплая тема в духе Claude Code. */
 html, body, #root {
   height: 100%;
   margin: 0;
 }
 
 body {
-  background-color: #0f0f1a;
-  color: #e5e7eb;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  user-select: none;            /* интерфейс десктопного приложения */
+  background-color: #1a1a18;
+  color: #ebe9e5;
+  font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
 }
 
-/* Тонкий тёмный скроллбар вместо системного. */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-thumb { background: #2a2a44; border-radius: 4px; }
+/* Скроллбары — тонкие, в цвет фона, едва заметные. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3833; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #4a4844; }
 
 /* В полях ввода текст всё-таки можно выделять. */
 input, textarea { user-select: text; }
+
+/* Стандартный outline у focused-элементов заменяем на тёплый оранжевый. */
+:focus-visible {
+  outline: 1px solid #d97757;
+  outline-offset: 2px;
+}
+
+/* Лёгкая подсветка выделения. */
+::selection {
+  background-color: rgba(217, 119, 87, 0.25);
+  color: #ebe9e5;
+}
